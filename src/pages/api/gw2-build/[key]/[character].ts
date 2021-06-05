@@ -2,8 +2,10 @@ import { NextApiHandler } from 'next'
 import fetch from 'isomorphic-fetch'
 import subMinutes from 'date-fns/subMinutes'
 import GuildWars2Build from '../../../../db/models/GuildWars2Build'
+import { runMiddleware, cors } from '../../../../middleware'
 
 const handler: NextApiHandler = async (req, response) => {
+  await runMiddleware(req, response, cors)
   let apiKey = req.query.key.toString()
   const character = req.query.character.toString()
   if (!apiKey) return

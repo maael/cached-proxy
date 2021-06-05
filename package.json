@@ -24,6 +24,7 @@
     ]
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "date-fns": "^2.22.1",
     "fathom-client": "^3.0.0",
     "isomorphic-fetch": "^3.0.0",
