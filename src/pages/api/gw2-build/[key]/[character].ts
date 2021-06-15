@@ -102,6 +102,7 @@ const handler: NextApiHandler = async (req, response) => {
           upsert: true,
         }
       )
+      response.setHeader('Cache-Control', 'max-age=300')
       response.json(toStore || {})
     } else {
       response.status(500).json({ error: 'Not okay' })
