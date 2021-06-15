@@ -26,30 +26,31 @@ const handler: NextApiHandler = async (req, response) => {
     if (res.ok) {
       const data = await res.json()
       console.info('[end:character]')
-      const characterData = data.filter((d) => d.name === character).pop()
+      const characterData = data.find((d) => d.name === character)
       delete characterData.recipes
       delete characterData.bags
       delete characterData.training
       delete characterData.backstory
       delete characterData.crafting
 
-      const skins = characterData.equipment.map(({ skin }) => skin).filter(Boolean)
-      const skills = Object.values(characterData.skills)
-        .flatMap(({ heal, elite, utilities }) => [heal, elite, utilities])
+      const skins = characterData.equipment.map((item) => item?.skin).filter(Boolean)
+      const skills = Object.values(characterData.skills || {})
+        .flatMap((s: any) => [s.heal, s.elite, s.utilities])
         .filter(Boolean)
-      const traits = Object.values(characterData.specializations).flatMap((t: any) => t.flatMap(({ traits }) => traits))
-      const specializations = Object.values(characterData.specializations).flatMap((t: any) =>
-        t.flatMap(({ id }) => id)
+      const traits = Object.values(characterData.specializations || {}).flatMap((t: any) =>
+        t.flatMap((item) => item?.traits)
       )
+      const specializations = Object.values(characterData.specializations || {})
+        .flatMap((t: any) => t.flatMap((item) => item?.id))
+        .filter(Boolean)
+      const equipmentIds = [characterData?.equipment_pvp?.rune]
+        .filter(Boolean)
+        .concat(characterData.equipment.map((item) => item?.id).filter(Boolean))
 
-      console.info('[start:extra]', { skins, skills, traits, specializations })
+      console.info('[start:extra]', { equipment: equipmentIds, skins, skills, traits, specializations })
 
       const [equipmentData, skinData, skillData, traitData, specializationData, amuletData] = await Promise.all([
-        fetch(
-          `https://api.guildwars2.com/v2/items?access_token=${apiKey}&ids=${[characterData.equipment_pvp.rune].concat(
-            characterData.equipment.map(({ id }) => id)
-          )}`
-        )
+        fetch(`https://api.guildwars2.com/v2/items?access_token=${apiKey}&ids=${equipmentIds}`)
           .then((r) => r.json())
           .then((d) => new Map(d.map((i) => [i.id, i]))),
         skins.length === 0
@@ -57,16 +58,22 @@ const handler: NextApiHandler = async (req, response) => {
           : fetch(`https://api.guildwars2.com/v2/skins?access_token=${apiKey}&ids=${skins}`)
               .then((r) => r.json())
               .then((d) => new Map(d.map((i) => [i.id, i]))),
-        fetch(`https://api.guildwars2.com/v2/skills?access_token=${apiKey}&ids=${skills}`)
-          .then((r) => r.json())
-          .then((d) => new Map(d.map((i) => [i.id, i]))),
-        fetch(`https://api.guildwars2.com/v2/traits?access_token=${apiKey}&ids=${traits}`)
-          .then((r) => r.json())
-          .then((d) => new Map(d.map((i) => [i.id, i]))),
-        fetch(`https://api.guildwars2.com/v2/specializations?access_token=${apiKey}&ids=${specializations}`)
-          .then((r) => r.json())
-          .then((d) => new Map(d.map((i) => [i.id, i]))),
-        characterData.equipment_pvp.amulet === null
+        skills.length === 0
+          ? new Map()
+          : fetch(`https://api.guildwars2.com/v2/skills?access_token=${apiKey}&ids=${skills}`)
+              .then((r) => r.json())
+              .then((d) => new Map(d.map((i) => [i.id, i]))),
+        traits.length === 0
+          ? new Map()
+          : fetch(`https://api.guildwars2.com/v2/traits?access_token=${apiKey}&ids=${traits}`)
+              .then((r) => r.json())
+              .then((d) => new Map(d.map((i) => [i.id, i]))),
+        specializations.length === 0
+          ? new Map()
+          : fetch(`https://api.guildwars2.com/v2/specializations?access_token=${apiKey}&ids=${specializations}`)
+              .then((r) => r.json())
+              .then((d) => new Map(d.map((i) => [i.id, i]))),
+        !characterData?.equipment_pvp?.amulet
           ? undefined
           : fetch(
               `https://api.guildwars2.com/v2/pvp/amulets?access_token=${apiKey}&id=${characterData.equipment_pvp.amulet}`
