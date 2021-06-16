@@ -45,7 +45,11 @@ const handler: NextApiHandler = async (req, response) => {
         .filter(Boolean)
       const equipmentIds = [characterData?.equipment_pvp?.rune]
         .filter(Boolean)
-        .concat(characterData.equipment.map((item) => item?.id).filter(Boolean))
+        .concat(
+          characterData.equipment
+            .flatMap((item) => [item?.id, item?.upgrades, item?.infusions].filter(Boolean))
+            .filter(Boolean)
+        )
 
       console.info('[start:extra]', { equipment: equipmentIds, skins, skills, traits, specializations })
 
