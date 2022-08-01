@@ -4,6 +4,13 @@ import subMinutes from 'date-fns/subMinutes'
 import GuildWars2Build from '../../../../db/models/GuildWars2Build'
 import { runMiddleware, cors } from '../../../../middleware'
 
+const logger = {
+  start: (tag, ...args) => console.info(`[start:${tag}]`, ...args),
+  end: (tag, ...args) => console.info(`[end:${tag}]`, ...args),
+  do: (tag, ...args) => console.info(`[${tag}]`, ...args),
+  warn: (msg) => console.warn('[warn]', msg),
+}
+
 const handler: NextApiHandler = async (req, response) => {
   await runMiddleware(req, response, cors)
   try {
@@ -21,28 +28,40 @@ const handler: NextApiHandler = async (req, response) => {
       response.json(match.data)
       return
     }
-    console.info('[start:character]')
+    logger.start('character')
     const res = await fetch(`https://api.guildwars2.com/v2/characters?access_token=${apiKey}&ids=all`)
     if (res.ok) {
       const data = await res.json()
-      console.info('[end:character]')
-      const characterData = data.find((d) => d.name === character)
+      logger.end('character')
+      const characterData = data.find((d) => d.name === character) || data[0]
+      if (!characterData) {
+        throw new Error(`No characters found: Requested ${character}`)
+      }
+      const usedCharacter = characterData.name
+      if (usedCharacter !== character) {
+        logger.warn(`Using ${usedCharacter} instead of ${character}`)
+      }
       delete characterData.recipes
       delete characterData.bags
       delete characterData.training
       delete characterData.backstory
       delete characterData.crafting
 
+      logger.do('skins')
       const skins = characterData.equipment.map((item) => item?.skin).filter(Boolean)
+      logger.do('skills')
       const skills = Object.values(characterData.skills || {})
         .flatMap((s: any) => [s.heal, s.elite, s.utilities])
         .filter(Boolean)
+      logger.do('traits')
       const traits = Object.values(characterData.specializations || {}).flatMap((t: any) =>
         t.flatMap((item) => item?.traits)
       )
+      logger.do('specializations')
       const specializations = Object.values(characterData.specializations || {})
         .flatMap((t: any) => t.flatMap((item) => item?.id))
         .filter(Boolean)
+      logger.do('equipmentIds')
       const equipmentIds = [characterData?.equipment_pvp?.rune]
         .filter(Boolean)
         .concat(
@@ -93,10 +112,10 @@ const handler: NextApiHandler = async (req, response) => {
         characterData,
       }
       await GuildWars2Build.findOneAndUpdate(
-        { character, key: apiKey },
+        { character: usedCharacter, key: apiKey },
         {
           $set: {
-            character,
+            character: usedCharacter,
             key: apiKey,
             data: toStore,
             lastUpdated: new Date(),
