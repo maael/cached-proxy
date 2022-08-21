@@ -20,9 +20,13 @@ const handler: NextApiHandler = async (req, response) => {
     const apiKey = (req.query.key || '').toString()
     const character = (req.query.character || '').toString()
     if (!apiKey) return
-    const getNormalPromise = getNormal(apiKey, character, response)
+    const abortController = new AbortController()
+    const getNormalPromise = getNormal(abortController, apiKey, character, response)
     const result = await Promise.race([getNormalPromise, wait(1_000 * 4)])
-    if (result === 'fallback') await fallback(apiKey, character, response)
+    if (result === 'fallback') {
+      abortController.abort()
+      await fallback(apiKey, character, response)
+    }
   } catch (e) {
     logger.warn(e)
     response.status(500).json({ error: e.message })
@@ -31,7 +35,12 @@ const handler: NextApiHandler = async (req, response) => {
   }
 }
 
-async function getNormal(originalApiKey: string, character: string, response: NextApiResponse) {
+async function getNormal(
+  abortController: AbortController,
+  originalApiKey: string,
+  character: string,
+  response: NextApiResponse
+) {
   try {
     const apiKey = encodeURIComponent(originalApiKey)
     const match = await GuildWars2Build.findOne({
@@ -47,7 +56,9 @@ async function getNormal(originalApiKey: string, character: string, response: Ne
     }
     logger.start('character')
     console.time('character')
-    const res = await fetch(`https://api.guildwars2.com/v2/characters?access_token=${apiKey}&ids=all`)
+    const res = await fetch(`https://api.guildwars2.com/v2/characters?access_token=${apiKey}&ids=all`, {
+      signal: abortController.signal,
+    })
     if (res.ok) {
       const data = await res.json()
       logger.end('character')
@@ -92,35 +103,46 @@ async function getNormal(originalApiKey: string, character: string, response: Ne
       console.info('[start:extra]')
 
       const [equipmentData, skinData, skillData, traitData, specializationData, amuletData] = await Promise.all([
-        fetch(`https://api.guildwars2.com/v2/items?access_token=${apiKey}&ids=${equipmentIds}`)
+        fetch(`https://api.guildwars2.com/v2/items?access_token=${apiKey}&ids=${equipmentIds}`, {
+          signal: abortController.signal,
+        })
           .then((r) => r.json())
           .then((d) => new Map(d.map((i) => [i.id, i]))),
         skins.length === 0
           ? new Map()
-          : fetch(`https://api.guildwars2.com/v2/skins?access_token=${apiKey}&ids=${skins}`)
+          : fetch(`https://api.guildwars2.com/v2/skins?access_token=${apiKey}&ids=${skins}`, {
+              signal: abortController.signal,
+            })
               .then((r) => r.json())
               .then((d) => new Map(d.map((i) => [i.id, i]))),
         skills.length === 0
           ? new Map()
-          : fetch(`https://api.guildwars2.com/v2/skills?access_token=${apiKey}&ids=${skills}`)
+          : fetch(`https://api.guildwars2.com/v2/skills?access_token=${apiKey}&ids=${skills}`, {
+              signal: abortController.signal,
+            })
               .then((r) => r.json())
               .then((d) => {
                 return new Map(d.map((i) => [i.id, i]))
               }),
         traits.length === 0
           ? new Map()
-          : fetch(`https://api.guildwars2.com/v2/traits?access_token=${apiKey}&ids=${traits}`)
+          : fetch(`https://api.guildwars2.com/v2/traits?access_token=${apiKey}&ids=${traits}`, {
+              signal: abortController.signal,
+            })
               .then((r) => r.json())
               .then((d) => new Map(d.map((i) => [i.id, i]))),
         specializations.length === 0
           ? new Map()
-          : fetch(`https://api.guildwars2.com/v2/specializations?access_token=${apiKey}&ids=${specializations}`)
+          : fetch(`https://api.guildwars2.com/v2/specializations?access_token=${apiKey}&ids=${specializations}`, {
+              signal: abortController.signal,
+            })
               .then((r) => r.json())
               .then((d) => new Map(d.map((i) => [i.id, i]))),
         !characterData?.equipment_pvp?.amulet
           ? undefined
           : fetch(
-              `https://api.guildwars2.com/v2/pvp/amulets?access_token=${apiKey}&id=${characterData.equipment_pvp.amulet}`
+              `https://api.guildwars2.com/v2/pvp/amulets?access_token=${apiKey}&id=${characterData.equipment_pvp.amulet}`,
+              { signal: abortController.signal }
             ).then((r) => r.json()),
       ])
       const toStore = {
@@ -152,8 +174,10 @@ async function getNormal(originalApiKey: string, character: string, response: Ne
       response.status(500).json({ error: 'Not okay' })
     }
   } catch (e) {
+    const err: Error = e
+    if (err.message.includes('The user aborted a request.')) return
     console.error('[error]', e)
-    response.status(500).json({ error: 'Not okay', message: e.message })
+    response.status(500).json({ error: 'Not okay', message: err.message })
   }
 }
 
