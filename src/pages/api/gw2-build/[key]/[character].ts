@@ -50,8 +50,10 @@ async function getNormal(
     })
     if (match) {
       logger.do('cached')
-      response.setHeader('Cache-Control', 'max-age=300')
-      response.json(match.data)
+      if (!abortController.signal.aborted) {
+        response.setHeader('Cache-Control', 'max-age=300')
+        response.json(match.data)
+      }
       return
     }
     logger.start('character')
@@ -168,16 +170,22 @@ async function getNormal(
           upsert: true,
         }
       )
-      response.setHeader('Cache-Control', 'max-age=300')
-      response.json(toStore || {})
+      if (!abortController.signal.aborted) {
+        response.setHeader('Cache-Control', 'max-age=300')
+        response.json(toStore || {})
+      }
     } else {
-      response.status(500).json({ error: 'Not okay' })
+      if (!abortController.signal.aborted) {
+        response.status(500).json({ error: 'Not okay' })
+      }
     }
   } catch (e) {
     const err: Error = e
     if (err.message.includes('The user aborted a request.')) return
     console.error('[error]', e)
-    response.status(500).json({ error: 'Not okay', message: err.message })
+    if (!abortController.signal.aborted) {
+      response.status(500).json({ error: 'Not okay', message: err.message })
+    }
   }
 }
 
