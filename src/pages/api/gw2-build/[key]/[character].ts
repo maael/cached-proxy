@@ -1,8 +1,8 @@
-import { NextApiHandler } from 'next'
+import { NextApiHandler, NextApiResponse } from 'next'
 import fetch from 'isomorphic-fetch'
 import subMinutes from 'date-fns/subMinutes'
 import GuildWars2Build from '../../../../db/models/GuildWars2Build'
-import { runMiddleware, cors } from '../../../../middleware'
+import { runMiddleware, cors } from '../../../../cors_middleware'
 
 const logger = {
   start: (tag, ...args) => console.info(`[start:${tag}]`, ...args),
@@ -11,13 +11,29 @@ const logger = {
   warn: (msg) => console.warn('[warn]', msg),
 }
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(() => resolve('fallback'), ms))
+
 const handler: NextApiHandler = async (req, response) => {
+  console.time('request')
   await runMiddleware(req, response, cors)
   try {
-    let apiKey = req.query.key.toString()
-    const character = req.query.character.toString()
+    const apiKey = (req.query.key || '').toString()
+    const character = (req.query.character || '').toString()
     if (!apiKey) return
-    apiKey = encodeURIComponent(apiKey)
+    const getNormalPromise = getNormal(apiKey, character, response)
+    const result = await Promise.race([getNormalPromise, wait(1_000 * 4)])
+    if (result === 'fallback') await fallback(apiKey, character, response)
+  } catch (e) {
+    logger.warn(e)
+    response.status(500).json({ error: e.message })
+  } finally {
+    console.timeEnd('request')
+  }
+}
+
+async function getNormal(originalApiKey: string, character: string, response: NextApiResponse) {
+  try {
+    const apiKey = encodeURIComponent(originalApiKey)
     const match = await GuildWars2Build.findOne({
       character,
       key: apiKey,
@@ -30,10 +46,12 @@ const handler: NextApiHandler = async (req, response) => {
       return
     }
     logger.start('character')
+    console.time('character')
     const res = await fetch(`https://api.guildwars2.com/v2/characters?access_token=${apiKey}&ids=all`)
     if (res.ok) {
       const data = await res.json()
       logger.end('character')
+      console.timeEnd('character')
       const characterData = data.find((d) => d.name === character) || data[0]
       if (!characterData) {
         throw new Error(`No characters found: Requested ${character}`)
@@ -86,7 +104,9 @@ const handler: NextApiHandler = async (req, response) => {
           ? new Map()
           : fetch(`https://api.guildwars2.com/v2/skills?access_token=${apiKey}&ids=${skills}`)
               .then((r) => r.json())
-              .then((d) => new Map(d.map((i) => [i.id, i]))),
+              .then((d) => {
+                return new Map(d.map((i) => [i.id, i]))
+              }),
         traits.length === 0
           ? new Map()
           : fetch(`https://api.guildwars2.com/v2/traits?access_token=${apiKey}&ids=${traits}`)
@@ -134,6 +154,22 @@ const handler: NextApiHandler = async (req, response) => {
   } catch (e) {
     console.error('[error]', e)
     response.status(500).json({ error: 'Not okay', message: e.message })
+  }
+}
+
+async function fallback(originalApiKey: string, character: string, response: NextApiResponse) {
+  const apiKey = encodeURIComponent(originalApiKey)
+  const match = await GuildWars2Build.findOne({
+    character,
+    key: apiKey,
+  })
+  if (match) {
+    logger.do('fallback')
+    response.setHeader('Cache-Control', 'max-age=300')
+    response.json(match.data)
+    return
+  } else {
+    response.status(400).json({})
   }
 }
 
