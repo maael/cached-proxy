@@ -21,9 +21,10 @@ const handler: NextApiHandler = async (req, response) => {
     const match = await GuildWars2Build.findOne({
       character,
       key: apiKey,
-      lastUpdated: { $gte: subMinutes(new Date(), 5) },
+      lastUpdated: { $gte: subMinutes(new Date(), 30) },
     })
     if (match) {
+      logger.do('cached')
       response.setHeader('Cache-Control', 'max-age=300')
       response.json(match.data)
       return
@@ -70,7 +71,7 @@ const handler: NextApiHandler = async (req, response) => {
             .filter(Boolean)
         )
 
-      console.info('[start:extra]', { equipment: equipmentIds, skins, skills, traits, specializations })
+      console.info('[start:extra]')
 
       const [equipmentData, skinData, skillData, traitData, specializationData, amuletData] = await Promise.all([
         fetch(`https://api.guildwars2.com/v2/items?access_token=${apiKey}&ids=${equipmentIds}`)
