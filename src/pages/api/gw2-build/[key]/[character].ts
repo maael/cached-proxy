@@ -22,7 +22,7 @@ const handler: NextApiHandler = async (req, response) => {
     if (!apiKey) return
     const abortController = new AbortController()
     const getNormalPromise = getNormal(abortController, apiKey, character, response)
-    const result = await Promise.race([getNormalPromise, wait(1_000 * 4)])
+    const result = await Promise.race([getNormalPromise, wait(1_000 * 20)])
     if (result === 'fallback') {
       abortController.abort()
       await fallback(apiKey, character, response)
