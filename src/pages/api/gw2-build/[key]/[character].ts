@@ -3,6 +3,7 @@ import fetch from 'isomorphic-fetch'
 import subMinutes from 'date-fns/subMinutes'
 import GuildWars2Build from '../../../../db/models/GuildWars2Build'
 import { runMiddleware, cors } from '../../../../cors_middleware'
+import { connect } from '../../../../db/mongo'
 
 const logger = {
   start: (tag, ...args) => console.info(`[start:${tag}]`, ...args),
@@ -21,6 +22,7 @@ const handler: NextApiHandler = async (req, response) => {
     const character = (req.query.character || '').toString()
     if (!apiKey) return
     const abortController = new AbortController()
+    await connect()
     const getNormalPromise = getNormal(abortController, apiKey, character, response)
     const result = await Promise.race([getNormalPromise, wait(1_000 * 20)])
     if (result === 'fallback') {

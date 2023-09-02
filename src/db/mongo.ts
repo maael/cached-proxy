@@ -1,16 +1,41 @@
 import mongoose from 'mongoose'
+declare global {
+  // eslint-disable-next-line no-var
+  var mongoose: any // This must be a `var` and not a `let / const`
+}
 
-let connection: mongoose.Connection
+const MONGODB_URI = process.env.MONGO_DB_URI!
 
-export function connect() {
-  if (connection) return connection
-  console.info('[new connection]')
-  connection = mongoose.createConnection(process.env.MONGO_DB_URI!, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useFindAndModify: false,
-    useCreateIndex: true,
-  })
+if (!MONGODB_URI) {
+  throw new Error('Please define the MONGODB_URI environment variable inside .env.local')
+}
 
-  return connection
+let cached = global.mongoose
+
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null }
+}
+
+export async function connect() {
+  if (cached.conn) {
+    return cached.conn
+  }
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+      useUnifiedTopology: true,
+      useNewUrlParser: true,
+    }
+    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+      return mongoose
+    })
+  }
+  try {
+    cached.conn = await cached.promise
+  } catch (e) {
+    cached.promise = null
+    throw e
+  }
+
+  return cached.conn
 }

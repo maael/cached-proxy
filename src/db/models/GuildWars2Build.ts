@@ -1,7 +1,4 @@
-import { Document, Schema, Model } from 'mongoose'
-import { connect } from '../mongo'
-
-const connection = connect()
+import mongoose, { Document, Schema, Model } from 'mongoose'
 
 export interface GuildWars2Build {
   key: string
@@ -40,6 +37,6 @@ const itemSchema = new Schema<ItemDocument, ItemModel>(
   }
 )
 
-const Item = connection.model<ItemDocument, ItemModel>('GuildWars2Build', itemSchema)
+const Item = mongoose.models.GuildWars2Build || mongoose.model<ItemDocument, ItemModel>('GuildWars2Build', itemSchema)
 
 export default Item
