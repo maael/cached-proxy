@@ -14,7 +14,8 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "downlevelIteration": true,
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "incremental": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".eslintrc.js"],
   "exclude": ["node_modules"]
